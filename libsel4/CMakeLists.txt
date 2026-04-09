@@ -53,11 +53,21 @@ config_option(
     DEFAULT ON
 )
 
+config_option(
+    LibSel4GenerateRustSyscallStubs
+    LIB_SEL4_GENERATE_RUST_SYSCALL_STUBS
+    "Generate Rust syscall bindings (include/interfaces/sel4_client.rs) alongside C stubs."
+    DEFAULT ON
+)
+
 if(LibSel4StubsUseIPCBufferOnly)
     set(buffer "--buffer")
 endif()
 
 RequireFile(SYSCALL_STUB_GEN_PATH syscall_stub_gen.py PATHS tools)
+if(LibSel4GenerateRustSyscallStubs)
+    RequireFile(SYSCALL_STUB_GEN_RS_PATH syscall_stub_gen_rs.py PATHS tools)
+endif()
 
 add_config_library(sel4 "${configure_string}")
 
@@ -162,15 +172,35 @@ add_custom_command(
     VERBATIM
 )
 
+if(LibSel4GenerateRustSyscallStubs)
+    add_custom_command(
+        OUTPUT include/interfaces/sel4_client.rs
+        COMMAND rm -f include/interfaces/sel4_client.rs
+        COMMAND "${PYTHON3}" "${SYSCALL_STUB_GEN_RS_PATH}" ${buffer} ${64bitguests} ${mcs} -a
+                "${KernelSel4Arch}" -o include/interfaces/sel4_client.rs ${interface_xmls}
+        DEPENDS "${SYSCALL_STUB_GEN_RS_PATH}" ${interface_xmls}
+        COMMENT "Generate sel4_client.rs"
+        VERBATIM
+    )
+endif()
+
+set(sel4_generated_outputs
+    include/interfaces/sel4_client.h
+    include/sel4/syscall.h
+    include/sel4/invocation.h
+    arch_include/${KernelArch}/sel4/arch/invocation.h
+    include/sel4/shared_types_gen.h
+    sel4_arch_include/${KernelSel4Arch}/sel4/sel4_arch/invocation.h
+    sel4_arch_include/${KernelSel4Arch}/sel4/sel4_arch/types_gen.h
+)
+
+if(LibSel4GenerateRustSyscallStubs)
+    list(APPEND sel4_generated_outputs include/interfaces/sel4_client.rs)
+endif()
+
 add_custom_target(
     sel4_generated
-    DEPENDS include/interfaces/sel4_client.h
-            include/sel4/syscall.h
-            include/sel4/invocation.h
-            arch_include/${KernelArch}/sel4/arch/invocation.h
-            include/sel4/shared_types_gen.h
-            sel4_arch_include/${KernelSel4Arch}/sel4/sel4_arch/invocation.h
-            sel4_arch_include/${KernelSel4Arch}/sel4/sel4_arch/types_gen.h
+    DEPENDS ${sel4_generated_outputs}
 )
 
 add_library(sel4 src/sel4_bootinfo.c)

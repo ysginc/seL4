@@ -96,6 +96,14 @@ Build Instructions
 
 See the seL4 website for [build instructions][6].
 
+Rust syscall bindings
+---------------------
+
+`libsel4` now supports generating Rust syscall stubs directly from the API XML as part of
+the existing generated-interface pipeline. When `LIB_SEL4_GENERATE_RUST_SYSCALL_STUBS=ON`
+(the default), `sel4_generated` will also emit `include/interfaces/sel4_client.rs`
+in the build directory.
+
 Status
 ------
 
