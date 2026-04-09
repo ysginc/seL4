@@ -1,3 +1,7 @@
+// Copyright 2026, seL4 contributors
+//
+// SPDX-License-Identifier: BSD-2-Clause
+
 use std::env;
 use std::path::PathBuf;
 
