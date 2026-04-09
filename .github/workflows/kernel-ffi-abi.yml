@@ -1,0 +1,35 @@
+# Copyright 2026, seL4 contributors
+#
+# SPDX-License-Identifier: BSD-2-Clause
+
+name: Kernel FFI ABI
+
+on:
+  pull_request:
+    paths:
+      - 'include/**'
+      - 'rust/kernel_ffi/**'
+      - '.github/workflows/kernel-ffi-abi.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'include/**'
+      - 'rust/kernel_ffi/**'
+      - '.github/workflows/kernel-ffi-abi.yml'
+  workflow_dispatch:
+
+jobs:
+  abi-drift:
+    name: ABI Drift Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install libclang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libclang-dev clang
+      - name: Run kernel FFI ABI checks
+        working-directory: rust/kernel_ffi
+        run: cargo test --locked
