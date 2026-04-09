@@ -96,6 +96,12 @@ Build Instructions
 
 See the seL4 website for [build instructions][6].
 
+Codex Cloud setup
+-----------------
+
+For Codex Cloud workspaces, run `.codex/setup.sh` to install host-side build
+dependencies required to configure and build seL4 in this repository.
+
 Rust syscall bindings
 ---------------------
 
