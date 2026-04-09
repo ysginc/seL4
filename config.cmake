@@ -174,6 +174,33 @@ config_option(
     imply you are using a verified kernel."
   DEFAULT ON)
 
+config_choice(
+  KernelRustBuildMode
+  KERNEL_RUST_BUILD_MODE
+  "Select Rust integration mode for kernel builds"
+  "experimental;KernelRustExperimental;KERNEL_RUST_EXPERIMENTAL"
+  "rust_only;KernelRustOnly;KERNEL_RUST_ONLY"
+  "rust_mixed;KernelRustMixed;KERNEL_RUST_MIXED")
+
+# Rust integration compatibility checks. Experimental mode keeps the baseline C-only flow.
+if(KernelRustOnly)
+  message(
+    FATAL_ERROR
+      "KernelRustOnly is not supported yet. Use KernelRustExperimental (default) or KernelRustMixed.")
+endif()
+
+if(KernelRustMixed)
+  if(NOT (KernelSel4ArchX86_64 OR KernelSel4ArchAarch64 OR KernelSel4ArchRiscV64))
+    message(
+      FATAL_ERROR
+        "KernelRustMixed currently supports only x86_64, aarch64, and riscv64 sel4 architectures.")
+  endif()
+  if(KernelVerificationBuild)
+    message(FATAL_ERROR "KernelRustMixed is incompatible with KernelVerificationBuild.")
+  endif()
+endif()
+
+
 config_option(
   KernelBinaryVerificationBuild
   BINARY_VERIFICATION_BUILD
