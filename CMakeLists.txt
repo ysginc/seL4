@@ -42,6 +42,82 @@ RequireTool(XMLLINT_PATH xmllint.sh)
 # Process the configuration scripts
 include(config.cmake)
 
+set(kernel_rust_staticlib "")
+set(kernel_rust_target_triple "")
+
+if(KernelRustMixed OR KernelRustOnly)
+  if(KernelSel4ArchX86_64)
+    set(kernel_rust_target_triple "x86_64-unknown-none")
+  elseif(KernelSel4ArchAarch64)
+    set(kernel_rust_target_triple "aarch64-unknown-none-softfloat")
+  elseif(KernelSel4ArchRiscV64)
+    set(kernel_rust_target_triple "riscv64imac-unknown-none-elf")
+  else()
+    message(FATAL_ERROR "No Rust target triple mapping for KernelSel4Arch='${KernelSel4Arch}'")
+  endif()
+
+  find_program(RUSTC_PATH rustc REQUIRED)
+  find_program(CARGO_PATH cargo REQUIRED)
+
+  execute_process(
+    COMMAND ${RUSTC_PATH} --version --verbose
+    OUTPUT_VARIABLE rustc_version_verbose
+    RESULT_VARIABLE rustc_version_status
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(NOT rustc_version_status EQUAL 0)
+    message(FATAL_ERROR "Failed to run rustc --version --verbose")
+  endif()
+  string(REGEX MATCH "release: ([0-9]+\\.[0-9]+\\.[0-9]+)" rustc_release_match
+               "${rustc_version_verbose}")
+  if(NOT rustc_release_match)
+    message(FATAL_ERROR "Could not parse rustc release from '${rustc_version_verbose}'")
+  endif()
+  set(RUSTC_VERSION "${CMAKE_MATCH_1}")
+  if(RUSTC_VERSION VERSION_LESS "1.78.0")
+    message(FATAL_ERROR "Rust toolchain too old (${RUSTC_VERSION}), need at least rustc 1.78.0")
+  endif()
+
+  execute_process(
+    COMMAND ${RUSTC_PATH} --print target-list
+    OUTPUT_VARIABLE rust_target_list
+    RESULT_VARIABLE rust_target_list_status
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(NOT rust_target_list_status EQUAL 0)
+    message(FATAL_ERROR "Failed to query rustc target list")
+  endif()
+  string(FIND "${rust_target_list}" "${kernel_rust_target_triple}" rust_target_found)
+  if(rust_target_found EQUAL -1)
+    message(
+      FATAL_ERROR
+        "Rust target '${kernel_rust_target_triple}' is unavailable in this toolchain. Install it with rustup target add ${kernel_rust_target_triple}."
+    )
+  endif()
+
+  set(kernel_rust_build_dir "${CMAKE_CURRENT_BINARY_DIR}/rust/${KernelSel4Arch}")
+  set(kernel_rust_src "${kernel_rust_build_dir}/kernel_rust_stub.rs")
+  set(kernel_rust_staticlib "${kernel_rust_build_dir}/libkernel_rust_${KernelSel4Arch}.a")
+
+  file(
+    WRITE "${kernel_rust_src}" "#![no_std]\n\
+#[no_mangle]\n\
+pub extern \"C\" fn kernel_rust_anchor() {}\n\
+\n\
+#[panic_handler]\n\
+fn panic(_info: &core::panic::PanicInfo) -> ! {\n\
+    loop {}\n\
+}\n")
+
+  add_custom_command(
+    OUTPUT ${kernel_rust_staticlib}
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${kernel_rust_build_dir}"
+    COMMAND ${RUSTC_PATH} --target ${kernel_rust_target_triple} --crate-type staticlib
+            -C panic=abort -o ${kernel_rust_staticlib} ${kernel_rust_src}
+    DEPENDS ${kernel_rust_src}
+    COMMENT "Building Rust kernel archive for ${KernelSel4Arch} (${kernel_rust_target_triple})"
+    VERBATIM)
+  add_custom_target(kernel_rust_${KernelSel4Arch} DEPENDS ${kernel_rust_staticlib})
+endif()
+
 # Define default global flag information so that users can compile with the same
 # basic architecture flags as the kernel
 
@@ -580,6 +656,10 @@ target_include_directories(kernel.elf PRIVATE ${config_dir})
 target_include_directories(kernel.elf PRIVATE include)
 target_include_directories(kernel.elf PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_link_libraries(kernel.elf PRIVATE kernel_Config kernel_autoconf)
+if(KernelRustMixed OR KernelRustOnly)
+  target_link_libraries(kernel.elf PRIVATE ${kernel_rust_staticlib})
+  add_dependencies(kernel.elf kernel_rust_${KernelSel4Arch})
+endif()
 set_property(TARGET kernel.elf APPEND_STRING PROPERTY LINK_FLAGS " -Wl,-T ${linker_lds_path} ")
 set_target_properties(kernel.elf PROPERTIES LINK_DEPENDS "${linker_lds_path}")
 add_dependencies(kernel.elf circular_includes)
